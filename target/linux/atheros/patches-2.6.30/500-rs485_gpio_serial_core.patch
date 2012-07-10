@@ -1,0 +1,71 @@
+--- a/drivers/serial/serial_core.c
++++ b/drivers/serial/serial_core.c
+@@ -27,6 +27,7 @@
+ #include <linux/slab.h>
+ #include <linux/init.h>
+ #include <linux/console.h>
++#include <linux/gpio.h>
+ #include <linux/proc_fs.h>
+ #include <linux/seq_file.h>
+ #include <linux/serial_core.h>
+@@ -475,6 +476,7 @@ __uart_put_char(struct uart_port *port,
+ 		ret = 1;
+ 	}
+ 	spin_unlock_irqrestore(&port->lock, flags);
++
+ 	return ret;
+ }
+ 
+@@ -482,7 +484,12 @@ static int uart_put_char(struct tty_stru
+ {
+ 	struct uart_state *state = tty->driver_data;
+ 
+-	return __uart_put_char(state->port, &state->info.xmit, ch);
++ 	int ret = __uart_put_char(state->port, &state->info.xmit, ch);
++	gpio_set_value(0, 1);
++	uart_wait_until_sent(tty, state->port->timeout);
++	gpio_set_value(0, 0);
++
++	return ret;
+ }
+ 
+ static void uart_flush_chars(struct tty_struct *tty)
+@@ -529,7 +536,12 @@ uart_write(struct tty_struct *tty, const
+ 	}
+ 	spin_unlock_irqrestore(&port->lock, flags);
+ 
++	// TODO: properly check for rs485 enabled, and use configured pin
++	gpio_set_value(0, 1);
+ 	uart_start(tty);
++	uart_wait_until_sent(tty, port->timeout);
++	gpio_set_value(0, 0);
++
+ 	return ret;
+ }
+ 
+@@ -1393,7 +1405,9 @@ static void uart_wait_until_sent(struct
+ 	 * we wait.
+ 	 */
+ 	while (!port->ops->tx_empty(port)) {
+-		msleep_interruptible(jiffies_to_msecs(char_time));
++		// FIXME - try without interruptible?
++		//msleep_interruptible(jiffies_to_msecs(char_time));
++		udelay(50);
+ 		if (signal_pending(current))
+ 			break;
+ 		if (time_after(jiffies, expire))
+@@ -2469,6 +2483,14 @@ int uart_add_one_port(struct uart_driver
+ 	 */
+ 	port->flags &= ~UPF_DEAD;
+ 
++	ret = gpio_request(0, "RS485:TX-Enable");
++	ret += gpio_direction_output(0, 0);
++	if (ret) {
++		printk(KERN_ALERT "Failed to steal gpio 0 for RS485 tx enable!\n");
++	} else {
++		printk(KERN_INFO "GPIO 0 stolen for use as RS485 tx enable\n");
++	}
++
+  out:
+ 	mutex_unlock(&state->mutex);
+ 	mutex_unlock(&port_mutex);
