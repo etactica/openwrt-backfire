@@ -2107,7 +2107,7 @@
 +
 --- /dev/null
 +++ b/arch/mips/ar231x/ar2315.c
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,660 @@
 +/*
 + * This file is subject to the terms and conditions of the GNU General Public
 + * License.  See the file "COPYING" in the main directory of this archive
@@ -2765,6 +2765,8 @@
 +
 +	_machine_restart = ar2315_restart;
 +	ar231x_serial_setup(KSEG1ADDR(AR2315_UART0), ar2315_apb_frequency());
++	// Hack tastic, make sure the globe light is off at boot
++	gpio_set_value(5, 1);
 +}
 --- /dev/null
 +++ b/arch/mips/ar231x/ar2315.h
